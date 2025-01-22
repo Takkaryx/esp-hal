@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- SPI: Added support for 3-wire SPI (#2919)
+- Added 'tsens::TemperatureSenso' peripheral for ESP32S3
 
 ### Changed
 

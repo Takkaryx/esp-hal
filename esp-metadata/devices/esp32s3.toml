@@ -76,6 +76,7 @@ symbols = [
     "very_large_intr_status",
     "gpio_bank_1",
     "spi_octal",
+    "tsens",
 
     # ROM capabilities
     "rom_crc_le",

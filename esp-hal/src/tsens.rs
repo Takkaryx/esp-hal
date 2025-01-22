@@ -38,15 +38,20 @@
 //! }
 //! # }
 //! ```
-//! 
+//!
 //! ## Implementation State
 //!
 //! - Temperature calibration range is not supported
 //! - Interrupts are not supported
 
+#[cfg(any(esp32c3, esp32c6))]
+use crate::peripherals::{APB_SARADC, TSENS};
+
+#[cfg(esp32s3)]
+use crate::peripherals::{SENS, TSENS};
+
 use crate::{
     peripheral::{Peripheral, PeripheralRef},
-    peripherals::{APB_SARADC, TSENS},
     system::GenericPeripheralGuard,
 };
 
@@ -118,6 +123,7 @@ impl Temperature {
 }
 
 /// Temperature sensor driver
+#[cfg(any(esp32c3, esp32c6))]
 #[derive(Debug)]
 pub struct TemperatureSensor<'d> {
     _peripheral: PeripheralRef<'d, TSENS>,
@@ -125,6 +131,7 @@ pub struct TemperatureSensor<'d> {
     _abp_saradc_guard: GenericPeripheralGuard<{ crate::system::Peripheral::ApbSarAdc as u8 }>,
 }
 
+#[cfg(any(esp32c3, esp32c6))]
 impl<'d> TemperatureSensor<'d> {
     /// Create a new temperature sensor instance with configuration
     /// The sensor will be automatically powered up
@@ -179,6 +186,75 @@ impl<'d> TemperatureSensor<'d> {
     #[inline]
     pub fn get_temperature(&self) -> Temperature {
         let raw_value = APB_SARADC::regs().tsens_ctrl().read().out().bits();
+
+        // TODO Address multiple temperature ranges and offsets
+        let offset = -1i8;
+
+        Temperature::new(raw_value, offset)
+    }
+}
+
+#[cfg(esp32s3)]
+#[derive(Debug)]
+/// Temperature sensor struct specific to ESP32S3
+pub struct TemperatureSensor<'d> {
+    _peripheral: PeripheralRef<'d, TSENS>,
+    _tsens_guard: GenericPeripheralGuard<{ crate::system::Peripheral::Tsens as u8 }>,
+    // _sens_guard: GenericPeripheralGuard<{ crate::system::Peripheral::SENS as u8 }>,
+}
+
+#[cfg(esp32s3)]
+impl<'d> TemperatureSensor<'d> {
+    /// Create a new temperature sensor instance with configuration
+    /// The sensor will be automatically powered up
+    pub fn new(
+        peripheral: impl Peripheral<P = TSENS> + 'd,
+        config: Config,
+    ) -> Result<Self, ConfigError> {
+        crate::into_ref!(peripheral);
+        // let sens_guard = GenericPeripheralGuard::new();
+        let tsens_guard = GenericPeripheralGuard::new();
+
+        let mut tsens = Self {
+            _peripheral: peripheral,
+            _tsens_guard: tsens_guard,
+            // _sens_guard: sens_guard,
+        };
+        tsens.apply_config(&config)?;
+
+        tsens.power_up();
+
+        Ok(tsens)
+    }
+
+    /// Power up the temperature sensor
+    pub fn power_up(&self) {
+        debug!("Power up");
+        SENS::regs()
+            .sar_tsens_ctrl()
+            .modify(|_, w| w.sar_tsens_power_up().set_bit());
+    }
+
+    /// Power down the temperature sensor - useful if you want to save power
+    pub fn power_down(&self) {
+        SENS::regs()
+            .sar_tsens_ctrl()
+            .modify(|_, w| w.sar_tsens_power_up().clear_bit());
+    }
+
+    /// Change the temperature sensor configuration
+    pub fn apply_config(&mut self, _config: &Config) -> Result<(), ConfigError> {
+        // Set clock source
+        SENS::regs()
+            .sar_tsens_ctrl()
+            .modify(|_, w| unsafe { w.sar_tsens_clk_div().bits(0) });
+        Ok(())
+    }
+
+    /// Get the raw temperature value
+    #[inline]
+    pub fn get_temperature(&self) -> Temperature {
+        let raw_value: u8 = (SENS::regs().sar_tsens_ctrl().read().bits() & 0xff) as u8;
 
         // TODO Address multiple temperature ranges and offsets
         let offset = -1i8;

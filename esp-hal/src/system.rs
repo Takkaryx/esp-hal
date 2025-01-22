@@ -4,6 +4,9 @@ use core::cell::RefCell;
 
 use critical_section::{CriticalSection, Mutex};
 
+#[cfg(esp32s3)]
+use crate::peripherals::SENS;
+
 use crate::peripherals::SYSTEM;
 
 /// Peripherals which can be enabled via `PeripheralClockControl`.
@@ -314,6 +317,9 @@ impl PeripheralClockControl {
         #[cfg(any(esp32c2, esp32c3, esp32s2, esp32s3))]
         let perip_clk_en1 = &system.perip_clk_en1();
 
+        #[cfg(esp32s3)]
+        let sens_clk_en = &SENS::regs().sar_peri_clk_gate_conf();
+
         match peripheral {
             #[cfg(spi2)]
             Peripheral::Spi2 => {
@@ -470,9 +476,13 @@ impl PeripheralClockControl {
             Peripheral::Systimer => {
                 perip_clk_en0.modify(|_, w| w.systimer_clk_en().bit(enable));
             }
-            #[cfg(tsens)]
+            #[cfg(all(tsens, esp32c3))]
             Peripheral::Tsens => {
-                perip_clk_en1.modify(|_, w| w.tsens_clk_en().bit(enable));
+                peri_clk_en.modify(|_, w| w.tsens_clk_en().bit(enable));
+            }
+            #[cfg(all(tsens, esp32s3))]
+            Peripheral::Tsens => {
+                sens_clk_en.modify(|_, w| w.tsens_clk_en().bit(enable));
             }
         }
     }
@@ -489,6 +499,9 @@ impl PeripheralClockControl {
 
         #[cfg(any(esp32c2, esp32c3, esp32s2, esp32s3))]
         let perip_rst_en1 = system.perip_rst_en1();
+
+        #[cfg(esp32s3)]
+        let sar_peri_rst = &SENS::regs().sar_peri_reset_conf();
 
         critical_section::with(|_cs| match peripheral {
             #[cfg(spi2)]
@@ -695,6 +708,11 @@ impl PeripheralClockControl {
             Peripheral::Tsens => {
                 perip_rst_en1.modify(|_, w| w.tsens_rst().set_bit());
                 perip_rst_en1.modify(|_, w| w.tsens_rst().clear_bit());
+            }
+            #[cfg(all(tsens, esp32s3))]
+            Peripheral::Tsens => {
+                sar_peri_rst.modify(|_, w| w.sar_tsens_reset().set_bit());
+                sar_peri_rst.modify(|_, w| w.sar_tsens_reset().clear_bit());
             }
         });
     }
